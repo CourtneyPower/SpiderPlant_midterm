@@ -33,7 +33,8 @@ const int DUSTSENSOR = D6;
 SYSTEM_MODE(AUTOMATIC);
 const int READ_DUSTSENSOR = 30000;
 int moistureReading, currentTime, lastSecond;
-float tempC, pressPA, humidRH, tempF, pressInHg;
+float humidRH, tempF, pressInHg;
+//float tempC, pressPA,;
 int lastInterval, duration, airQuality;
 int lowPulseOccupancy = 0;
 int last_lpo = 0;
@@ -46,7 +47,7 @@ IoTTimer checkSensors;
 void MQTT_connect();
 bool MQTT_ping();
 void getDustSensorReadings();
-
+void calcRoomVals(float *humid, float *temp, float *press);
 /************ Global State (you don't need to change this!) ***   ***************/ 
 TCPClient TheClient; 
 
@@ -100,8 +101,9 @@ void loop()
 MQTT_connect();
 MQTT_ping();
  //digitalWrite(MOTORPIN, LOW);
+//Air Quality
 airQuality = aqSensor.slope();
-
+//Dust Concentration
 duration = pulseIn(DUSTSENSOR, LOW);
 lowPulseOccupancy = lowPulseOccupancy + duration;
 if ((millis() - lastInterval) > READ_DUSTSENSOR) { //replace with IoTTimer
@@ -114,15 +116,19 @@ if ((millis() - lastInterval) > READ_DUSTSENSOR) { //replace with IoTTimer
   lowPulseOccupancy = 0;
   lastInterval = millis();
 }
-
-tempC = roomSensor.readTemperature();
-pressPA = roomSensor.readPressure();
-humidRH = roomSensor.readHumidity();
-tempF = map(tempC,0.0,100.0,32.0,212.0);
-pressInHg = (pressPA/3386.39);
+//BME280 
+calcRoomVals(&humidRH, &tempF, &pressInHg);
+// tempC = roomSensor.readTemperature();
+// pressPA = roomSensor.readPressure();
+// humidRH = roomSensor.readHumidity();
+// tempF = map(tempC,0.0,100.0,32.0,212.0);
+// pressInHg = (pressPA/3386.39);
+//soil moisture reading
 moistureReading = analogRead(moistureSensor);
+
 Serial.printf("temp %02f, pressure %02f, humidity %02f\n", tempF, pressInHg, humidRH);
 Serial.printf("moisture %i\n", moistureReading);
+//OLED
 display.clearDisplay();
  display.setCursor(0, 0);
 display.printf("Moisture\n");
@@ -179,4 +185,13 @@ void getDustSensorReadings() {
 // Serial.printf("LPO: %i\n", lowPulseOccupancy);
 // Serial.printf ("Ratio: %02f\n", ratio);
 // Serial.printf("Concentration: %02f cps/L\n", concentration);
+}
+
+void calcRoomVals(float *humid, float *temp, float *press) {
+ float tempC, pressPA;
+ tempC = roomSensor.readTemperature();
+ pressPA = roomSensor.readPressure();
+*humid = roomSensor.readHumidity();
+*temp = map(tempC,0.0,100.0,32.0,212.0);
+*press = (pressPA/3386.39);
 }
