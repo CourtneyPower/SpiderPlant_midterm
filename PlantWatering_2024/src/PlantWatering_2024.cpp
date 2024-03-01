@@ -42,33 +42,36 @@ float ratio = 0;
 float concentration = 0;
 bool status;
 String DateTime, TimeOnly;
-IoTTimer checkSensors;
+IoTTimer publishTimer, checkPlantTimer;
 
 void MQTT_connect();
 bool MQTT_ping();
 void getDustSensorReadings();
 void calcRoomVals(float *humid, float *temp, float *press);
+void waterPlant();
+void publishValues();
+void getConc();
 /************ Global State (you don't need to change this!) ***   ***************/ 
 TCPClient TheClient; 
-
 // Setup the MQTT client class by passing in the WiFi client and MQTT server and login details. 
 Adafruit_MQTT_SPARK mqtt(&TheClient,AIO_SERVER,AIO_SERVERPORT,AIO_USERNAME,AIO_KEY); 
-
 /****************************** Feeds ***************************************/ 
 // Setup Feeds to publish or subscribe 
 Adafruit_MQTT_Subscribe subButtonFeed = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/buttononoff"); 
 Adafruit_MQTT_Publish pubDustSensorFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/dustsensor");
 Adafruit_MQTT_Publish pubAirQualityFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/airquality");
+Adafruit_MQTT_Publish pubRoomTempFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/roomtemp");
+Adafruit_MQTT_Publish pubRoomPressureFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/roompressure");
+Adafruit_MQTT_Publish pubRoomHumidityFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/roomhumidity");
 
 // Run the application and system concurrently in separate threads
-// SYSTEM_THREAD(ENABLED);
-// SerialLogHandler logHandler(LOG_LEVEL_INFO);
+SYSTEM_THREAD(ENABLED);
 
-// setup() runs once, when the device is first turned on
 void setup()
 {
   // Put initialization like pinMode and begin functions here
-  pinMode(A5, INPUT); // MouistureSensor is an INPUT
+  pinMode(moistureSensor, INPUT); // MouistureSensor is an INPUT
+  pinMode(DUSTSENSOR, INPUT);
   pinMode (MOTORPIN, OUTPUT);
  digitalWrite(MOTORPIN, LOW);
   WiFi.connect();
@@ -82,11 +85,17 @@ void setup()
   Particle.syncTime();
   Serial.begin(9600);
   waitFor(Serial.isConnected, 10000);
+  new Thread("concTread", getConc);
   display.begin(SSD1306_SWITCHCAPVCC, 0x3c);
   status = roomSensor.begin(0x76);
     if (status == false) {
     Serial.printf ("BME280/TempSensor at address 0x%02X failed to start ", 0x76);
     }
+if (aqSensor.init()) {
+  Serial.printf("Air Quality Sensor ready.\n");
+} else {
+  Serial.printf("Air Quality Sensor ERROR!\n");
+}
   display.setTextSize(2);
   display.setTextColor(WHITE);
   display.setCursor(0, 0);
@@ -94,49 +103,31 @@ void setup()
   delay(2000);
   display.clearDisplay();
   display.display();
+  publishTimer.startTimer(60000);//1 minute timer
+  checkPlantTimer.startTimer(300000); //5 minute timer
 }
 
-// loop() runs over and over again, as quickly as it can execute.
 void loop()
 {
 MQTT_connect();
 MQTT_ping();
- //digitalWrite(MOTORPIN, LOW);
 //Air Quality
 airQuality = aqSensor.slope();
 //Dust Concentration
-duration = pulseIn(DUSTSENSOR, LOW);
-lowPulseOccupancy = lowPulseOccupancy + duration;
-Serial.printf("Duration %i, LPO %i\n", duration, lowPulseOccupancy);
-if ((millis() - lastInterval) > READ_DUSTSENSOR) { //replace with IoTTimer
-  getDustSensorReadings();
-      // if(mqtt.Update()) {
-      // pubDustSensorFeed.publish(concentration);
-      // pubAirQualityFeed.publish(airQuality);
-    Serial.printf("Publishing %i air quality, %0.2f concentration \n",airQuality, concentration); 
-      // } 
-  lowPulseOccupancy = 0;
-  lastInterval = millis();
-}
-//BME280 
+// duration = pulseIn(DUSTSENSOR, LOW);
+// lowPulseOccupancy = lowPulseOccupancy + duration;
+// if ((millis() - lastInterval) > READ_DUSTSENSOR) { //replace with IoTTimer
+//   getDustSensorReadings();
+//       // if(mqtt.Update()) {
+//       // pubDustSensorFeed.publish(concentration);
+//       // pubAirQualityFeed.publish(airQuality);
+//     //Serial.printf("Publishing %i air quality, %0.2f concentration \n",airQuality, concentration); 
+//       // } 
+//   lowPulseOccupancy = 0;
+//   lastInterval = millis();
+// }
+//BME280 function call
 calcRoomVals(&humidRH, &tempF, &pressInHg);
-// tempC = roomSensor.readTemperature();
-// pressPA = roomSensor.readPressure();
-// humidRH = roomSensor.readHumidity();
-// tempF = map(tempC,0.0,100.0,32.0,212.0);
-// pressInHg = (pressPA/3386.39);
-//soil moisture reading
-moistureReading = analogRead(moistureSensor);
-
-Serial.printf("temp %0.2f, pressure %0.2f, humidity %0.2f\n", tempF, pressInHg, humidRH);
-Serial.printf("moisture %i\n", moistureReading);
-//OLED
-display.clearDisplay();
- display.setCursor(0, 0);
-display.printf("Moisture %i\n", moistureReading);
-display.printf("Temp %0.1f, Press Hg %0.1f, Humid %0.1f\n", tempF, pressInHg, humidRH);
-display.printf("%s\n",TimeOnly.c_str());
-display.display();
 
 Adafruit_MQTT_Subscribe *subscription;
 while ((subscription = mqtt.readSubscription(100))) {
@@ -144,13 +135,34 @@ while ((subscription = mqtt.readSubscription(100))) {
       subButtonState = atoi((char *)subButtonFeed.lastread);
     }
 }
-if ((moistureReading >= 1220) || (subButtonState == 1)){
-  digitalWrite(MOTORPIN,HIGH);
-  delay(1000);
-  digitalWrite(MOTORPIN, LOW);
-}
+
+if (checkPlantTimer.isTimerReady()){
+  moistureReading = analogRead(moistureSensor);
+  checkPlantTimer.startTimer(30000);
 }
 
+if ((moistureReading >= 1220) || (subButtonState == 1)){  
+    waterPlant();
+    moistureReading = 1100;
+} 
+//OLED
+display.clearDisplay();
+display.setCursor(0, 0);
+display.printf("%s\n",TimeOnly.c_str());
+display.printf("Soil %i\n", moistureReading);
+display.printf("Temp %0.1f, PressHg %0.1f, Humid %0.1f\n", tempF, pressInHg, humidRH);
+display.display();
+
+
+
+if (publishTimer.isTimerReady()) {
+Serial.printf("temp %0.2f, pressure %0.2f, humidity %0.2f\n", tempF, pressInHg, humidRH);
+Serial.printf("moisture %i\n", moistureReading);
+Serial.printf("Publishing %i air quality, %0.2f concentration \n",airQuality, concentration);
+publishValues();
+publishTimer.startTimer(60000);
+  }
+}
 //additional functions
 void MQTT_connect() {
   int8_t ret;
@@ -206,6 +218,40 @@ void calcRoomVals(float *humid, float *temp, float *press) {
  tempC = roomSensor.readTemperature();
  pressPA = roomSensor.readPressure();
 *humid = roomSensor.readHumidity();
+// *temp = tempC;
 *temp = map(tempC,0.0,100.0,32.0,212.0);
 *press = (pressPA/3386.39);
+}
+
+void waterPlant() {
+  digitalWrite(MOTORPIN,HIGH);
+  delay(500);
+  digitalWrite(MOTORPIN, LOW);
+}
+
+void publishValues() {
+  if(mqtt.Update()) {
+      pubDustSensorFeed.publish(concentration);
+      pubAirQualityFeed.publish(airQuality);
+      pubRoomTempFeed.publish(tempF);
+      pubRoomPressureFeed.publish(pressInHg);
+      pubRoomHumidityFeed.publish(humidRH);
+      }
+}
+
+void getConc() {
+  const int sampleTime = 30000;
+  unsigned int duration, startTime;
+  startTime = 0;
+  lowPulseOccupancy = 0;
+  while (true) {
+    duration = pulseIn(DUSTSENSOR, LOW);
+    lowPulseOccupancy = lowPulseOccupancy+duration;
+    if ((millis()-startTime) > sampleTime) {
+      ratio = lowPulseOccupancy/ (sampleTime * 10.0);
+      concentration = 1.1*pow(ratio,3)-3.8*pow(ratio,2)+520*ratio+0.62;
+      startTime = millis();
+      lowPulseOccupancy = 0;
+    }
+  }
 }
