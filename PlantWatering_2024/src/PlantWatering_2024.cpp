@@ -32,7 +32,7 @@ const int DUSTSENSOR = D6;
 
 SYSTEM_MODE(AUTOMATIC);
 const int READ_DUSTSENSOR = 30000;
-int moistureReading, currentTime, lastSecond;
+int moistureReading, currentTime, lastSecond, subButtonState;
 float humidRH, tempF, pressInHg;
 //float tempC, pressPA,;
 int lastInterval, duration, airQuality;
@@ -56,7 +56,7 @@ Adafruit_MQTT_SPARK mqtt(&TheClient,AIO_SERVER,AIO_SERVERPORT,AIO_USERNAME,AIO_K
 
 /****************************** Feeds ***************************************/ 
 // Setup Feeds to publish or subscribe 
-//Adafruit_MQTT_Subscribe subButtonFeed = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/buttononoff"); 
+Adafruit_MQTT_Subscribe subButtonFeed = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/buttononoff"); 
 Adafruit_MQTT_Publish pubDustSensorFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/dustsensor");
 Adafruit_MQTT_Publish pubAirQualityFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/airquality");
 
@@ -76,6 +76,7 @@ void setup()
   {
     Serial.printf(",");
   }
+  mqtt.subscribe(&subButtonFeed);
   // Particle.connect();
   Time.zone(-7);
   Particle.syncTime();
@@ -106,13 +107,14 @@ airQuality = aqSensor.slope();
 //Dust Concentration
 duration = pulseIn(DUSTSENSOR, LOW);
 lowPulseOccupancy = lowPulseOccupancy + duration;
+Serial.printf("Duration %i, LPO %i\n", duration, lowPulseOccupancy);
 if ((millis() - lastInterval) > READ_DUSTSENSOR) { //replace with IoTTimer
   getDustSensorReadings();
-      if(mqtt.Update()) {
-      pubDustSensorFeed.publish(concentration);
-      pubAirQualityFeed.publish(airQuality);
-      Serial.printf("Publishing %i air quality, %02f concentration \n",airQuality, concentration); 
-      } 
+      // if(mqtt.Update()) {
+      // pubDustSensorFeed.publish(concentration);
+      // pubAirQualityFeed.publish(airQuality);
+    Serial.printf("Publishing %i air quality, %0.2f concentration \n",airQuality, concentration); 
+      // } 
   lowPulseOccupancy = 0;
   lastInterval = millis();
 }
@@ -126,15 +128,27 @@ calcRoomVals(&humidRH, &tempF, &pressInHg);
 //soil moisture reading
 moistureReading = analogRead(moistureSensor);
 
-Serial.printf("temp %02f, pressure %02f, humidity %02f\n", tempF, pressInHg, humidRH);
+Serial.printf("temp %0.2f, pressure %0.2f, humidity %0.2f\n", tempF, pressInHg, humidRH);
 Serial.printf("moisture %i\n", moistureReading);
 //OLED
 display.clearDisplay();
  display.setCursor(0, 0);
-display.printf("Moisture\n");
-display.printf("%i\n", moistureReading);
+display.printf("Moisture %i\n", moistureReading);
+display.printf("Temp %0.1f, Press Hg %0.1f, Humid %0.1f\n", tempF, pressInHg, humidRH);
 display.printf("%s\n",TimeOnly.c_str());
 display.display();
+
+Adafruit_MQTT_Subscribe *subscription;
+while ((subscription = mqtt.readSubscription(100))) {
+    if (subscription == &subButtonFeed) {
+      subButtonState = atoi((char *)subButtonFeed.lastread);
+    }
+}
+if ((moistureReading >= 1220) || (subButtonState == 1)){
+  digitalWrite(MOTORPIN,HIGH);
+  delay(1000);
+  digitalWrite(MOTORPIN, LOW);
+}
 }
 
 //additional functions
@@ -184,7 +198,7 @@ void getDustSensorReadings() {
   concentration = 1.1 * pow(ratio, 3) - 3.8 * pow(ratio,2) + 520 * ratio + 0.62;
 // Serial.printf("LPO: %i\n", lowPulseOccupancy);
 // Serial.printf ("Ratio: %02f\n", ratio);
-// Serial.printf("Concentration: %02f cps/L\n", concentration);
+Serial.printf("Concentration: %02f cps/L\n", concentration);
 }
 
 void calcRoomVals(float *humid, float *temp, float *press) {
