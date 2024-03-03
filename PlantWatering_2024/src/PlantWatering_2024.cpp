@@ -31,7 +31,7 @@ const int DUSTSENSOR = D6;
 
 
 SYSTEM_MODE(AUTOMATIC);
-const int READ_DUSTSENSOR = 30000;
+//const int READ_DUSTSENSOR = 30000;
 int moistureReading, currentTime, lastSecond, subButtonState;
 float humidRH, tempF, pressInHg;
 //float tempC, pressPA,;
@@ -46,7 +46,7 @@ IoTTimer publishTimer, checkPlantTimer;
 
 void MQTT_connect();
 bool MQTT_ping();
-void getDustSensorReadings();
+//void getDustSensorReadings();
 void calcRoomVals(float *humid, float *temp, float *press);
 void waterPlant();
 void publishValues();
@@ -70,7 +70,7 @@ SYSTEM_THREAD(ENABLED);
 void setup()
 {
   // Put initialization like pinMode and begin functions here
-  pinMode(moistureSensor, INPUT); // MouistureSensor is an INPUT
+  pinMode(moistureSensor, INPUT); // MoistureSensor is an INPUT
   pinMode(DUSTSENSOR, INPUT);
   pinMode (MOTORPIN, OUTPUT);
  digitalWrite(MOTORPIN, LOW);
@@ -104,28 +104,18 @@ if (aqSensor.init()) {
   display.clearDisplay();
   display.display();
   publishTimer.startTimer(60000);//1 minute timer
-  checkPlantTimer.startTimer(300000); //5 minute timer
+  checkPlantTimer.startTimer(60000); //5 minute timer
 }
 
 void loop()
 {
 MQTT_connect();
 MQTT_ping();
+DateTime = Time.timeStr();
+TimeOnly = DateTime.substring(11, 19);
 //Air Quality
 airQuality = aqSensor.slope();
-//Dust Concentration
-// duration = pulseIn(DUSTSENSOR, LOW);
-// lowPulseOccupancy = lowPulseOccupancy + duration;
-// if ((millis() - lastInterval) > READ_DUSTSENSOR) { //replace with IoTTimer
-//   getDustSensorReadings();
-//       // if(mqtt.Update()) {
-//       // pubDustSensorFeed.publish(concentration);
-//       // pubAirQualityFeed.publish(airQuality);
-//     //Serial.printf("Publishing %i air quality, %0.2f concentration \n",airQuality, concentration); 
-//       // } 
-//   lowPulseOccupancy = 0;
-//   lastInterval = millis();
-// }
+
 //BME280 function call
 calcRoomVals(&humidRH, &tempF, &pressInHg);
 
@@ -138,31 +128,46 @@ while ((subscription = mqtt.readSubscription(100))) {
 
 if (checkPlantTimer.isTimerReady()){
   moistureReading = analogRead(moistureSensor);
-  checkPlantTimer.startTimer(30000);
+  Serial.printf("moisture read %i\n", moistureReading);
+  checkPlantTimer.startTimer(60000); //5min timer
+}
+
+
+if (publishTimer.isTimerReady()) {
+publishValues();
+//OLED
+display.clearDisplay();
+display.setCursor(0, 0);
+display.printf("%s\n",TimeOnly.c_str());
+display.printf("Soil %i\n", moistureReading);
+display.printf("Temp %0.1f\n", tempF);
+display.printf("PressHg %0.1f\n", pressInHg);
+display.display();
+delay(1000);
+display.clearDisplay();
+display.setCursor(0,0);
+display.printf("%s\n",TimeOnly.c_str());
+display.printf("Humid %0.1f\n", humidRH);
+display.display();
+delay(500);
+display.clearDisplay();
+display.display();
+
+Serial.printf("temp %0.2f, pressure %0.2f, humidity %0.2f\n", tempF, pressInHg, humidRH);
+Serial.printf("moisture %i\n", moistureReading);
+Serial.printf("Publishing %i air quality, %0.2f concentration \n",airQuality, concentration);
+Serial.printf("ButtonState %i\n", subButtonState);
+
+publishTimer.startTimer(60000); //1minute timer
 }
 
 if ((moistureReading >= 1220) || (subButtonState == 1)){  
     waterPlant();
     moistureReading = 1100;
 } 
-//OLED
-display.clearDisplay();
-display.setCursor(0, 0);
-display.printf("%s\n",TimeOnly.c_str());
-display.printf("Soil %i\n", moistureReading);
-display.printf("Temp %0.1f, PressHg %0.1f, Humid %0.1f\n", tempF, pressInHg, humidRH);
-display.display();
 
-
-
-if (publishTimer.isTimerReady()) {
-Serial.printf("temp %0.2f, pressure %0.2f, humidity %0.2f\n", tempF, pressInHg, humidRH);
-Serial.printf("moisture %i\n", moistureReading);
-Serial.printf("Publishing %i air quality, %0.2f concentration \n",airQuality, concentration);
-publishValues();
-publishTimer.startTimer(60000);
-  }
 }
+//end loop
 //additional functions
 void MQTT_connect() {
   int8_t ret;
@@ -199,33 +204,32 @@ bool MQTT_ping() {
   return pingStatus;
 }
 
-void getDustSensorReadings() {
-  if (lowPulseOccupancy == 0) {
-    lowPulseOccupancy = last_lpo;
-  }
-  else {
-    last_lpo = lowPulseOccupancy;
-  }
-  ratio = lowPulseOccupancy / (READ_DUSTSENSOR * 10.0);
-  concentration = 1.1 * pow(ratio, 3) - 3.8 * pow(ratio,2) + 520 * ratio + 0.62;
-// Serial.printf("LPO: %i\n", lowPulseOccupancy);
-// Serial.printf ("Ratio: %02f\n", ratio);
-Serial.printf("Concentration: %02f cps/L\n", concentration);
-}
+// void getDustSensorReadings() {
+//   if (lowPulseOccupancy == 0) {
+//     lowPulseOccupancy = last_lpo;
+//   }
+//   else {
+//     last_lpo = lowPulseOccupancy;
+//   }
+//   ratio = lowPulseOccupancy / (READ_DUSTSENSOR * 10.0);
+//   concentration = 1.1 * pow(ratio, 3) - 3.8 * pow(ratio,2) + 520 * ratio + 0.62;
+// // Serial.printf("LPO: %i\n", lowPulseOccupancy);
+// // Serial.printf ("Ratio: %02f\n", ratio);
+// Serial.printf("Concentration: %02f cps/L\n", concentration);
+// }
 
 void calcRoomVals(float *humid, float *temp, float *press) {
  float tempC, pressPA;
  tempC = roomSensor.readTemperature();
  pressPA = roomSensor.readPressure();
 *humid = roomSensor.readHumidity();
-// *temp = tempC;
 *temp = map(tempC,0.0,100.0,32.0,212.0);
 *press = (pressPA/3386.39);
 }
 
 void waterPlant() {
   digitalWrite(MOTORPIN,HIGH);
-  delay(500);
+  delay(10000); //10 seconds
   digitalWrite(MOTORPIN, LOW);
 }
 
