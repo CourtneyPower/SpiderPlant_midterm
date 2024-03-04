@@ -26,7 +26,7 @@ const int MOTORPIN = D9;
 Adafruit_SSD1306 display(OLED_RESET);
 Adafruit_BME280 roomSensor;
 const int SOILSENSOR = A5;
-AirQualitySensor aqSensor(A1);
+AirQualitySensor aqSensor(A0);
 const int DUSTSENSOR = D6;
 
 
@@ -70,7 +70,7 @@ SYSTEM_THREAD(ENABLED);
 void setup()
 {
   // Put initialization like pinMode and begin functions here
-  pinMode(A5, INPUT); 
+  // pinMode(SOILSENSOR, INPUT_PULLDOWN); 
   pinMode(DUSTSENSOR, INPUT);
   pinMode (MOTORPIN, OUTPUT);
  digitalWrite(MOTORPIN, LOW);
@@ -106,6 +106,7 @@ if (aqSensor.init()) {
   publishTimer.startTimer(60000);//1 minute timer
   checkPlantTimer.startTimer(60000); //5 minute timer
   moistureReading = 1100;
+pinMode(SOILSENSOR, INPUT); 
 }
 
 void loop()
@@ -130,11 +131,11 @@ while ((subscription = mqtt.readSubscription(100))) {
 if (checkPlantTimer.isTimerReady()){
   moistureReading = analogRead(A5);
   Serial.printf("moisture read %i\n", moistureReading);
-  checkPlantTimer.startTimer(60000); //5min timer
+  checkPlantTimer.startTimer(60000); //1min timer
 }
  
 
-if (publishTimer.isTimerReady()) {
+if (publishTimer.isTimerReady()) { //once per minute
 publishValues();
 //OLED
 display.clearDisplay();
@@ -146,20 +147,20 @@ display.printf("PressHg %0.1f\n", pressInHg);
 display.display();
 delay(1000);
 display.clearDisplay();
-display.setCursor(0,0);
+display.setCursor(0,0); //reset display b/c only allows 4 lines of text
 display.printf("%s\n",TimeOnly.c_str());
 display.printf("Humid %0.1f\n", humidRH);
 display.display();
 delay(500);
 display.clearDisplay();
 display.display();
-
+//troubleshooting prints
 Serial.printf("temp %0.2f, pressure %0.2f, humidity %0.2f\n", tempF, pressInHg, humidRH);
 Serial.printf("moisture %i\n", moistureReading);
 Serial.printf("Publishing %i air quality, %0.2f concentration \n",airQuality, concentration);
 Serial.printf("ButtonState %i\n", subButtonState);
 
-publishTimer.startTimer(60000); //1minute timer
+publishTimer.startTimer(60000); // restart 1minute timer
 }
 
 if ((moistureReading >= 1220) || (subButtonState == 1)){  
