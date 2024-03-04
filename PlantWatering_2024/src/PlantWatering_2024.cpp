@@ -25,8 +25,8 @@ const int OLED_RESET = -1;
 const int MOTORPIN = D9;
 Adafruit_SSD1306 display(OLED_RESET);
 Adafruit_BME280 roomSensor;
-int moistureSensor = A5;
-AirQualitySensor aqSensor(A2);
+const int SOILSENSOR = A5;
+AirQualitySensor aqSensor(A1);
 const int DUSTSENSOR = D6;
 
 
@@ -70,7 +70,7 @@ SYSTEM_THREAD(ENABLED);
 void setup()
 {
   // Put initialization like pinMode and begin functions here
-  pinMode(moistureSensor, INPUT); // MoistureSensor is an INPUT
+  pinMode(A5, INPUT); 
   pinMode(DUSTSENSOR, INPUT);
   pinMode (MOTORPIN, OUTPUT);
  digitalWrite(MOTORPIN, LOW);
@@ -84,8 +84,8 @@ void setup()
   Time.zone(-7);
   Particle.syncTime();
   Serial.begin(9600);
-  waitFor(Serial.isConnected, 10000);
-  new Thread("concTread", getConc);
+  waitFor(Serial.isConnected, 15000);
+  //new Thread("concTread", getConc);
   display.begin(SSD1306_SWITCHCAPVCC, 0x3c);
   status = roomSensor.begin(0x76);
     if (status == false) {
@@ -105,6 +105,7 @@ if (aqSensor.init()) {
   display.display();
   publishTimer.startTimer(60000);//1 minute timer
   checkPlantTimer.startTimer(60000); //5 minute timer
+  moistureReading = 1100;
 }
 
 void loop()
@@ -118,7 +119,7 @@ airQuality = aqSensor.slope();
 
 //BME280 function call
 calcRoomVals(&humidRH, &tempF, &pressInHg);
-
+// moistureReading = analogRead(A5);
 Adafruit_MQTT_Subscribe *subscription;
 while ((subscription = mqtt.readSubscription(100))) {
     if (subscription == &subButtonFeed) {
@@ -127,11 +128,11 @@ while ((subscription = mqtt.readSubscription(100))) {
 }
 
 if (checkPlantTimer.isTimerReady()){
-  moistureReading = analogRead(moistureSensor);
+  moistureReading = analogRead(A5);
   Serial.printf("moisture read %i\n", moistureReading);
   checkPlantTimer.startTimer(60000); //5min timer
 }
-
+ 
 
 if (publishTimer.isTimerReady()) {
 publishValues();
@@ -229,7 +230,7 @@ void calcRoomVals(float *humid, float *temp, float *press) {
 
 void waterPlant() {
   digitalWrite(MOTORPIN,HIGH);
-  delay(10000); //10 seconds
+  delay(5000); //5 seconds
   digitalWrite(MOTORPIN, LOW);
 }
 
