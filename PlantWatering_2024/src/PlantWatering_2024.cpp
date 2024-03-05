@@ -46,7 +46,6 @@ IoTTimer publishTimer, checkPlantTimer;
 
 void MQTT_connect();
 bool MQTT_ping();
-//void getDustSensorReadings();
 void calcRoomVals(float *humid, float *temp, float *press);
 void waterPlant();
 void publishValues();
@@ -70,7 +69,6 @@ SYSTEM_THREAD(ENABLED);
 void setup()
 {
   // Put initialization like pinMode and begin functions here
-  // pinMode(SOILSENSOR, INPUT_PULLDOWN); 
   pinMode(DUSTSENSOR, INPUT);
   pinMode (MOTORPIN, OUTPUT);
  digitalWrite(MOTORPIN, LOW);
@@ -85,7 +83,7 @@ void setup()
   Particle.syncTime();
   Serial.begin(9600);
   waitFor(Serial.isConnected, 15000);
-  //new Thread("concTread", getConc);
+  new Thread("concTread", getConc);
   display.begin(SSD1306_SWITCHCAPVCC, 0x3c);
   status = roomSensor.begin(0x76);
     if (status == false) {
@@ -120,7 +118,7 @@ airQuality = aqSensor.slope();
 
 //BME280 function call
 calcRoomVals(&humidRH, &tempF, &pressInHg);
-// moistureReading = analogRead(A5);
+
 Adafruit_MQTT_Subscribe *subscription;
 while ((subscription = mqtt.readSubscription(100))) {
     if (subscription == &subButtonFeed) {
@@ -131,7 +129,7 @@ while ((subscription = mqtt.readSubscription(100))) {
 if (checkPlantTimer.isTimerReady()){
   moistureReading = analogRead(A5);
   Serial.printf("moisture read %i\n", moistureReading);
-  checkPlantTimer.startTimer(60000); //1min timer
+  checkPlantTimer.startTimer(30000); //1min timer
 }
  
 
@@ -205,20 +203,6 @@ bool MQTT_ping() {
   }
   return pingStatus;
 }
-
-// void getDustSensorReadings() {
-//   if (lowPulseOccupancy == 0) {
-//     lowPulseOccupancy = last_lpo;
-//   }
-//   else {
-//     last_lpo = lowPulseOccupancy;
-//   }
-//   ratio = lowPulseOccupancy / (READ_DUSTSENSOR * 10.0);
-//   concentration = 1.1 * pow(ratio, 3) - 3.8 * pow(ratio,2) + 520 * ratio + 0.62;
-// // Serial.printf("LPO: %i\n", lowPulseOccupancy);
-// // Serial.printf ("Ratio: %02f\n", ratio);
-// Serial.printf("Concentration: %02f cps/L\n", concentration);
-// }
 
 void calcRoomVals(float *humid, float *temp, float *press) {
  float tempC, pressPA;
