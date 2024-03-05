@@ -27,10 +27,10 @@ void loop() {
 delay(5000);
 digitalWrite(MOTORPIN, HIGH);
 Serial.printf("MotorPin is HIGH\n");
-delay(5000);
+delay(10000);
 digitalWrite(MOTORPIN, LOW);
 Serial.printf("MotorPin is LOW\n");
-delay(10000);
+delay(5000);
   // Example: Publish event to cloud every 10 seconds. Uncomment the next 3 lines to try it!
   // Log.info("Sending Hello World to the cloud!");
   // Particle.publish("Hello world!");

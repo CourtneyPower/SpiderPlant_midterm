@@ -56,7 +56,8 @@ TCPClient TheClient;
 Adafruit_MQTT_SPARK mqtt(&TheClient,AIO_SERVER,AIO_SERVERPORT,AIO_USERNAME,AIO_KEY); 
 /****************************** Feeds ***************************************/ 
 // Setup Feeds to publish or subscribe 
-Adafruit_MQTT_Subscribe subButtonFeed = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/buttononoff"); 
+Adafruit_MQTT_Subscribe subButtonFeed = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/buttononoff");
+Adafruit_MQTT_Subscribe subEmailFeed = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/email"); 
 Adafruit_MQTT_Publish pubDustSensorFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/dustsensor");
 Adafruit_MQTT_Publish pubAirQualityFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/airquality");
 Adafruit_MQTT_Publish pubRoomTempFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/roomtemp");
@@ -78,6 +79,7 @@ void setup()
     Serial.printf(",");
   }
   mqtt.subscribe(&subButtonFeed);
+  mqtt.subscribe(&subEmailFeed);
   // Particle.connect();
   Time.zone(-7);
   Particle.syncTime();
@@ -123,6 +125,12 @@ Adafruit_MQTT_Subscribe *subscription;
 while ((subscription = mqtt.readSubscription(100))) {
     if (subscription == &subButtonFeed) {
       subButtonState = atoi((char *)subButtonFeed.lastread);
+    }
+    if (subscription == &subEmailFeed) {
+      digitalWrite(D7, HIGH);
+      Serial.printf("You've got mail!\n");
+      delay(1000);
+      digitalWrite(D7, LOW);
     }
 }
 
