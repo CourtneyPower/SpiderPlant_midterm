@@ -30,7 +30,7 @@ AirQualitySensor aqSensor(A0);
 const int DUSTSENSOR = D6;
 
 
-SYSTEM_MODE(AUTOMATIC);
+SYSTEM_MODE(SEMI_AUTOMATIC);
 int moistureReading, moistureVal, currentTime, lastSecond, subButtonState;
 float humidRH, tempF, pressInHg;
 int lastInterval, duration, airQuality;
@@ -78,7 +78,8 @@ void setup()
   }
   mqtt.subscribe(&subButtonFeed);
   mqtt.subscribe(&subEmailFeed);
-  // Particle.connect();
+  Particle.connect();
+  delay(10000);
   Time.zone(-7);
   Particle.syncTime();
   Serial.begin(9600);
@@ -102,7 +103,7 @@ if (aqSensor.init()) {
   display.clearDisplay();
   display.display();
 publishTimer.startTimer(60000);//1 minute timer
-checkPlantTimer.startTimer(60000); //1 minute timer
+checkPlantTimer.startTimer(30000); //1 minute timer
   moistureVal = 1100;
 pinMode(SOILSENSOR, INPUT); 
 }
@@ -133,10 +134,10 @@ while ((subscription = mqtt.readSubscription(100))) {
 }
 
 if (checkPlantTimer.isTimerReady()){
-  moistureReading = analogRead(A5);
+  moistureReading = analogRead(SOILSENSOR);
   Serial.printf("moisture read %i\n", moistureReading);
   moistureVal = moistureReading;
-  checkPlantTimer.startTimer(60000); //1min timer
+  checkPlantTimer.startTimer(30000); //1min timer
 }
  
 
@@ -148,7 +149,7 @@ display.setCursor(0, 0);
 display.printf("%s\n",TimeOnly.c_str());
 //display.printf("Soil %i\n", moistureReading);
 display.printf("Temp %0.1f\n", tempF);
-display.printf("PressHg %0.1f\n", pressInHg);
+display.printf("PressHg %0.0f\n", pressInHg);
 display.printf("Humid %0.1f\n", humidRH);
 display.display();
 delay(2000);
