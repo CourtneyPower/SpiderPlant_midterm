@@ -39,11 +39,6 @@ int last_lpo = 0;
 float ratio = 0;
 float concentration = 0;
 bool status;
-char airqualitynow[8];
-char airquality3[8] = "GoodAir";
-char airquality2[8] = "LowPoll";
-char airquality1[8] = "HighPol";
-char airquality0[8] = "Danger";
 String DateTime, TimeOnly;
 IoTTimer publishTimer, checkPlantTimer;
 
@@ -52,7 +47,7 @@ bool MQTT_ping();
 void calcRoomVals(float *humid, float *temp, float *press);
 void waterPlant();
 void publishValues();
-//void getConc();
+void getConc();
 /************ Global State (you don't need to change this!) ***   ***************/ 
 TCPClient TheClient; 
 // Setup the MQTT client class by passing in the WiFi client and MQTT server and login details. 
@@ -68,14 +63,14 @@ Adafruit_MQTT_Publish pubRoomPressureFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USE
 Adafruit_MQTT_Publish pubRoomHumidityFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/roomhumidity");
 Adafruit_MQTT_Publish pubSoilMoistureFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/soilmoisture");
 // Run the application and system concurrently in separate threads
-//SYSTEM_THREAD(ENABLED);
+SYSTEM_THREAD(ENABLED);
 
 void setup()
 {
   // Put initialization like pinMode and begin functions here
   pinMode(DUSTSENSOR, INPUT);
   pinMode (MOTORPIN, OUTPUT);
- digitalWrite(MOTORPIN, LOW);
+    digitalWrite(MOTORPIN, LOW);
   WiFi.connect();
   while (WiFi.connecting())
   {
@@ -88,7 +83,7 @@ void setup()
   Particle.syncTime();
   Serial.begin(9600);
   waitFor(Serial.isConnected, 15000);
-  //new Thread("concTread", getConc);
+  new Thread("concTread", getConc);
   display.begin(SSD1306_SWITCHCAPVCC, 0x3c);
   status = roomSensor.begin(0x76);
     if (status == false) {
@@ -107,7 +102,7 @@ if (aqSensor.init()) {
   display.clearDisplay();
   display.display();
 publishTimer.startTimer(60000);//1 minute timer
-checkPlantTimer.startTimer(60000); //5 minute timer
+checkPlantTimer.startTimer(60000); //1 minute timer
   moistureVal = 1100;
 pinMode(SOILSENSOR, INPUT); 
 }
@@ -120,15 +115,6 @@ DateTime = Time.timeStr();
 TimeOnly = DateTime.substring(11, 19);
 //Air Quality
 airQuality = aqSensor.slope(); //3 is good, 0 is danger
-if (airQuality == 3) {
-  airqualitynow[8] = airquality3[8];
-} if (airQuality == 2) {
-  airqualitynow[8] = airquality2[8];
-} if (airQuality == 1) {
-  airqualitynow[8] = airquality1[8];
-} if(airQuality == 0) {
-  airqualitynow[8] = airquality0[8];
-}
 
 //BME280 function call
 calcRoomVals(&humidRH, &tempF, &pressInHg);
@@ -170,7 +156,7 @@ display.clearDisplay();
 display.setCursor(0,0); //reset display b/c only allows 4 lines of text
 display.printf("%s\n",TimeOnly.c_str());
 display.printf("Dust %0.1f\n", concentration);
-display.printf("AQ %s\n", airqualitynow);
+display.printf("AQ %i\n", airQuality);
 display.display();
 delay(2000);
 display.clearDisplay();
@@ -180,13 +166,13 @@ Serial.printf("temp %0.2f, pressure %0.2f, humidity %0.2f\n", tempF, pressInHg, 
 Serial.printf("moisture reading %i\n", moistureReading);
 Serial.printf("moisture value %i\n", moistureVal);
 Serial.printf("Publishing %i air quality, %0.2f concentration \n",airQuality, concentration);
-Serial.printf("Air Quality %s \n", airqualitynow);
+Serial.printf("Air Quality %i \n", airQuality);
 Serial.printf("ButtonState %i \n", subButtonState);
 
 publishTimer.startTimer(60000); // restart 1minute timer
 }
 
-if ((moistureVal >= 4096) || (subButtonState == 1)){  
+if ((moistureVal >= 4096) || (subButtonState == 1)){  //preventing pump from constantly triggering, reset to ~1500 when fixed
     waterPlant();
     moistureVal = 1200;
 } 
@@ -251,23 +237,23 @@ void publishValues() {
       pubRoomTempFeed.publish(tempF);
       pubRoomPressureFeed.publish(pressInHg);
       pubRoomHumidityFeed.publish(humidRH);
-      pubSoilMoistureFeed.publish(moistureReading);
+     pubSoilMoistureFeed.publish(moistureReading);
       }
 }
 
-// void getConc() {
-//   const int sampleTime = 30000;
-//   unsigned int duration, startTime;
-//   startTime = 0;
-//   lowPulseOccupancy = 0;
-//   while (true) {
-//     duration = pulseIn(DUSTSENSOR, LOW);
-//     lowPulseOccupancy = lowPulseOccupancy+duration;
-//     if ((millis()-startTime) > sampleTime) {
-//       ratio = lowPulseOccupancy/ (sampleTime * 10.0);
-//       concentration = 1.1*pow(ratio,3)-3.8*pow(ratio,2)+520*ratio+0.62;
-//       startTime = millis();
-//       lowPulseOccupancy = 0;
-//     }
-//   }
-// }
+void getConc() {
+  const int sampleTime = 30000;
+  unsigned int duration, startTime;
+  startTime = 0;
+  lowPulseOccupancy = 0;
+  while (true) {
+    duration = pulseIn(DUSTSENSOR, LOW);
+    lowPulseOccupancy = lowPulseOccupancy+duration;
+    if ((millis()-startTime) > sampleTime) {
+      ratio = lowPulseOccupancy/ (sampleTime * 10.0);
+      concentration = 1.1*pow(ratio,3)-3.8*pow(ratio,2)+520*ratio+0.62;
+      startTime = millis();
+      lowPulseOccupancy = 0;
+    }
+  }
+}
