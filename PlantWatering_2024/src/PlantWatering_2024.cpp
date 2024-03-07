@@ -1,7 +1,7 @@
 /*
  * Project Plant Watering System - Spider Plants (2024)
  * Author: Courtney Power
- * Date: Feb 2024
+ * Date: Feb/Mar 2024
  * Measure Soil Moisture levels and determine if plants needs water, water plant
  * Measure ambient environmental factors (temp, press, humidity, dust, air quality)
  * Include a Adafruit Button to manually water plant
@@ -25,22 +25,25 @@ const int OLED_RESET = -1;
 const int MOTORPIN = D9;
 Adafruit_SSD1306 display(OLED_RESET);
 Adafruit_BME280 roomSensor;
-const int SOILSENSOR = A5;
+const int SOILSENSOR = A2;
 AirQualitySensor aqSensor(A0);
 const int DUSTSENSOR = D6;
 
 
 SYSTEM_MODE(AUTOMATIC);
-//const int READ_DUSTSENSOR = 30000;
-int moistureReading, currentTime, lastSecond, subButtonState;
+int moistureReading, moistureVal, currentTime, lastSecond, subButtonState;
 float humidRH, tempF, pressInHg;
-//float tempC, pressPA,;
 int lastInterval, duration, airQuality;
 int lowPulseOccupancy = 0;
 int last_lpo = 0;
 float ratio = 0;
 float concentration = 0;
 bool status;
+char airqualitynow[8];
+char airquality3[8] = "GoodAir";
+char airquality2[8] = "LowPoll";
+char airquality1[8] = "HighPol";
+char airquality0[8] = "Danger";
 String DateTime, TimeOnly;
 IoTTimer publishTimer, checkPlantTimer;
 
@@ -49,7 +52,7 @@ bool MQTT_ping();
 void calcRoomVals(float *humid, float *temp, float *press);
 void waterPlant();
 void publishValues();
-void getConc();
+//void getConc();
 /************ Global State (you don't need to change this!) ***   ***************/ 
 TCPClient TheClient; 
 // Setup the MQTT client class by passing in the WiFi client and MQTT server and login details. 
@@ -63,9 +66,9 @@ Adafruit_MQTT_Publish pubAirQualityFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USERN
 Adafruit_MQTT_Publish pubRoomTempFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/roomtemp");
 Adafruit_MQTT_Publish pubRoomPressureFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/roompressure");
 Adafruit_MQTT_Publish pubRoomHumidityFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/roomhumidity");
-
+Adafruit_MQTT_Publish pubSoilMoistureFeed = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/soilmoisture");
 // Run the application and system concurrently in separate threads
-SYSTEM_THREAD(ENABLED);
+//SYSTEM_THREAD(ENABLED);
 
 void setup()
 {
@@ -85,7 +88,7 @@ void setup()
   Particle.syncTime();
   Serial.begin(9600);
   waitFor(Serial.isConnected, 15000);
-  new Thread("concTread", getConc);
+  //new Thread("concTread", getConc);
   display.begin(SSD1306_SWITCHCAPVCC, 0x3c);
   status = roomSensor.begin(0x76);
     if (status == false) {
@@ -103,9 +106,9 @@ if (aqSensor.init()) {
   delay(2000);
   display.clearDisplay();
   display.display();
-  publishTimer.startTimer(60000);//1 minute timer
-  checkPlantTimer.startTimer(60000); //5 minute timer
-  moistureReading = 1100;
+publishTimer.startTimer(60000);//1 minute timer
+checkPlantTimer.startTimer(60000); //5 minute timer
+  moistureVal = 1100;
 pinMode(SOILSENSOR, INPUT); 
 }
 
@@ -116,7 +119,16 @@ MQTT_ping();
 DateTime = Time.timeStr();
 TimeOnly = DateTime.substring(11, 19);
 //Air Quality
-airQuality = aqSensor.slope();
+airQuality = aqSensor.slope(); //3 is good, 0 is danger
+if (airQuality == 3) {
+  airqualitynow[8] = airquality3[8];
+} if (airQuality == 2) {
+  airqualitynow[8] = airquality2[8];
+} if (airQuality == 1) {
+  airqualitynow[8] = airquality1[8];
+} if(airQuality == 0) {
+  airqualitynow[8] = airquality0[8];
+}
 
 //BME280 function call
 calcRoomVals(&humidRH, &tempF, &pressInHg);
@@ -129,7 +141,7 @@ while ((subscription = mqtt.readSubscription(100))) {
     if (subscription == &subEmailFeed) {
       digitalWrite(D7, HIGH);
       Serial.printf("You've got mail!\n");
-      delay(1000);
+      delay(500);
       digitalWrite(D7, LOW);
     }
 }
@@ -137,7 +149,8 @@ while ((subscription = mqtt.readSubscription(100))) {
 if (checkPlantTimer.isTimerReady()){
   moistureReading = analogRead(A5);
   Serial.printf("moisture read %i\n", moistureReading);
-  checkPlantTimer.startTimer(30000); //1min timer
+  moistureVal = moistureReading;
+  checkPlantTimer.startTimer(60000); //1min timer
 }
  
 
@@ -147,31 +160,35 @@ publishValues();
 display.clearDisplay();
 display.setCursor(0, 0);
 display.printf("%s\n",TimeOnly.c_str());
-display.printf("Soil %i\n", moistureReading);
+//display.printf("Soil %i\n", moistureReading);
 display.printf("Temp %0.1f\n", tempF);
 display.printf("PressHg %0.1f\n", pressInHg);
+display.printf("Humid %0.1f\n", humidRH);
 display.display();
-delay(1000);
+delay(2000);
 display.clearDisplay();
 display.setCursor(0,0); //reset display b/c only allows 4 lines of text
 display.printf("%s\n",TimeOnly.c_str());
-display.printf("Humid %0.1f\n", humidRH);
+display.printf("Dust %0.1f\n", concentration);
+display.printf("AQ %s\n", airqualitynow);
 display.display();
-delay(500);
+delay(2000);
 display.clearDisplay();
 display.display();
 //troubleshooting prints
 Serial.printf("temp %0.2f, pressure %0.2f, humidity %0.2f\n", tempF, pressInHg, humidRH);
-Serial.printf("moisture %i\n", moistureReading);
+Serial.printf("moisture reading %i\n", moistureReading);
+Serial.printf("moisture value %i\n", moistureVal);
 Serial.printf("Publishing %i air quality, %0.2f concentration \n",airQuality, concentration);
-Serial.printf("ButtonState %i\n", subButtonState);
+Serial.printf("Air Quality %s \n", airqualitynow);
+Serial.printf("ButtonState %i \n", subButtonState);
 
 publishTimer.startTimer(60000); // restart 1minute timer
 }
 
-if ((moistureReading >= 1220) || (subButtonState == 1)){  
+if ((moistureVal >= 4096) || (subButtonState == 1)){  
     waterPlant();
-    moistureReading = 1100;
+    moistureVal = 1200;
 } 
 
 }
@@ -223,7 +240,7 @@ void calcRoomVals(float *humid, float *temp, float *press) {
 
 void waterPlant() {
   digitalWrite(MOTORPIN,HIGH);
-  delay(5000); //5 seconds
+  delay(500); //0.5 seconds
   digitalWrite(MOTORPIN, LOW);
 }
 
@@ -234,22 +251,23 @@ void publishValues() {
       pubRoomTempFeed.publish(tempF);
       pubRoomPressureFeed.publish(pressInHg);
       pubRoomHumidityFeed.publish(humidRH);
+      pubSoilMoistureFeed.publish(moistureReading);
       }
 }
 
-void getConc() {
-  const int sampleTime = 30000;
-  unsigned int duration, startTime;
-  startTime = 0;
-  lowPulseOccupancy = 0;
-  while (true) {
-    duration = pulseIn(DUSTSENSOR, LOW);
-    lowPulseOccupancy = lowPulseOccupancy+duration;
-    if ((millis()-startTime) > sampleTime) {
-      ratio = lowPulseOccupancy/ (sampleTime * 10.0);
-      concentration = 1.1*pow(ratio,3)-3.8*pow(ratio,2)+520*ratio+0.62;
-      startTime = millis();
-      lowPulseOccupancy = 0;
-    }
-  }
-}
+// void getConc() {
+//   const int sampleTime = 30000;
+//   unsigned int duration, startTime;
+//   startTime = 0;
+//   lowPulseOccupancy = 0;
+//   while (true) {
+//     duration = pulseIn(DUSTSENSOR, LOW);
+//     lowPulseOccupancy = lowPulseOccupancy+duration;
+//     if ((millis()-startTime) > sampleTime) {
+//       ratio = lowPulseOccupancy/ (sampleTime * 10.0);
+//       concentration = 1.1*pow(ratio,3)-3.8*pow(ratio,2)+520*ratio+0.62;
+//       startTime = millis();
+//       lowPulseOccupancy = 0;
+//     }
+//   }
+// }
