@@ -42,6 +42,7 @@ bool status;
 String DateTime, TimeOnly;
 IoTTimer publishTimer, checkPlantTimer;
 
+String getAirQuality();
 void MQTT_connect();
 bool MQTT_ping();
 void calcRoomVals(float *humid, float *temp, float *press);
@@ -103,7 +104,7 @@ if (aqSensor.init()) {
   display.clearDisplay();
   display.display();
 publishTimer.startTimer(60000);//1 minute timer
-checkPlantTimer.startTimer(30000); //1 minute timer
+checkPlantTimer.startTimer(1800000); //30 minute timer
   moistureVal = 1100;
 pinMode(SOILSENSOR, INPUT); 
 }
@@ -116,7 +117,7 @@ DateTime = Time.timeStr();
 TimeOnly = DateTime.substring(11, 19);
 //Air Quality
 airQuality = aqSensor.slope(); //3 is good, 0 is danger
-
+String quality = getAirQuality();
 //BME280 function call
 calcRoomVals(&humidRH, &tempF, &pressInHg);
 
@@ -137,7 +138,7 @@ if (checkPlantTimer.isTimerReady()){
   moistureReading = analogRead(SOILSENSOR);
   Serial.printf("moisture read %i\n", moistureReading);
   moistureVal = moistureReading;
-  checkPlantTimer.startTimer(30000); //1min timer
+  checkPlantTimer.startTimer(1800000); //30min timer
 }
  
 
@@ -147,33 +148,34 @@ publishValues();
 display.clearDisplay();
 display.setCursor(0, 0);
 display.printf("%s\n",TimeOnly.c_str());
-//display.printf("Soil %i\n", moistureReading);
 display.printf("Temp %0.1f\n", tempF);
-display.printf("PressHg %0.0f\n", pressInHg);
+display.printf("Press %0.0f\n", pressInHg);
 display.printf("Humid %0.1f\n", humidRH);
 display.display();
 delay(2000);
 display.clearDisplay();
 display.setCursor(0,0); //reset display b/c only allows 4 lines of text
 display.printf("%s\n",TimeOnly.c_str());
-display.printf("Dust %0.1f\n", concentration);
+display.printf("Dust %0.0f\n", concentration);
 display.printf("AQ %i\n", airQuality);
+display.printf("%s\n", quality.c_str());
 display.display();
 delay(2000);
 display.clearDisplay();
 display.display();
 //troubleshooting prints
-Serial.printf("temp %0.2f, pressure %0.2f, humidity %0.2f\n", tempF, pressInHg, humidRH);
-Serial.printf("moisture reading %i\n", moistureReading);
-Serial.printf("moisture value %i\n", moistureVal);
-Serial.printf("Publishing %i air quality, %0.2f concentration \n",airQuality, concentration);
-Serial.printf("Air Quality %i \n", airQuality);
-Serial.printf("ButtonState %i \n", subButtonState);
+// Serial.printf("temp %0.2f, pressure %0.2f, humidity %0.2f\n", tempF, pressInHg, humidRH);
+// Serial.printf("moisture reading %i\n", moistureReading);
+// Serial.printf("moisture value %i\n", moistureVal);
+// Serial.printf("Publishing %i air quality, %0.2f concentration \n",airQuality, concentration);
+// Serial.printf("Air Quality %i \n", airQuality);
+// Serial.printf("Air Quality: %s\n", quality.c_str());
+// Serial.printf("ButtonState %i \n", subButtonState);
 
 publishTimer.startTimer(60000); // restart 1minute timer
 }
 
-if ((moistureVal >= 4096) || (subButtonState == 1)){  //preventing pump from constantly triggering, reset to ~1500 when fixed
+if ((moistureVal >= 3500) || (subButtonState == 1)){  
     waterPlant();
     moistureVal = 1200;
 } 
@@ -258,3 +260,16 @@ void getConc() {
     }
   }
 }
+
+String getAirQuality() {
+  int quality = aqSensor.slope();
+  String qual = "None";
+  if (quality == AirQualitySensor::FORCE_SIGNAL) {
+    qual = "Danger";
+  } else if (quality == AirQualitySensor::HIGH_POLLUTION) {
+    qual = "High Pollution";
+  } else if (quality == AirQualitySensor::FRESH_AIR) {
+    qual = "Fresh Air";
+  }
+  return qual;
+  }

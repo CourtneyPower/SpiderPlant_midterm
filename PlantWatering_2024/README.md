@@ -2,7 +2,7 @@
 
 This project is for a plant self-watering system that also measures room environmentals.  You will need access to a 3D printer, the ability to fabricate a support system (I used an epilog laser with 1/8" acrylic), BME280, moisture sensor, OLED, Dust Sensor, Air Quality Sensor, and pump motor.
 
-For more details on this project, please visit my Hackster Account
+For more details on this project, please visit my Hackster Account https://www.hackster.io/crpower05/self-watering-spider-plant-02041f
 
 This firmware project was created using [Particle Developer Tools](https://www.particle.io/developer-tools/) and is compatible with all [Particle Devices](https://www.particle.io/devices/).
 
